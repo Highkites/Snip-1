@@ -1,0 +1,7 @@
+{
+  "rewrites": [
+    { "source": "/api/shorten", "destination": "/api/shorten" },
+    { "source": "/api/check-alias", "destination": "/api/check-alias" },
+    { "source": "/:platform/:alias", "destination": "/api/redirect?platform=:platform&alias=:alias" }
+  ]
+}

@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Shortly — Free URL Shortener</title>
+<style>
+  :root {
+    --bg: #0f1115;
+    --card: #171a21;
+    --accent: #6366f1;
+    --accent-hover: #4f46e5;
+    --text: #e5e7eb;
+    --muted: #9ca3af;
+    --border: #2a2e38;
+    --success: #22c55e;
+    --error: #ef4444;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+  }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 40px;
+    width: 100%;
+    max-width: 520px;
+  }
+  h1 {
+    margin: 0 0 4px;
+    font-size: 28px;
+  }
+  p.subtitle {
+    margin: 0 0 28px;
+    color: var(--muted);
+    font-size: 14px;
+  }
+  label {
+    display: block;
+    font-size: 13px;
+    color: var(--muted);
+    margin-bottom: 6px;
+    margin-top: 16px;
+  }
+  input {
+    width: 100%;
+    padding: 12px 14px;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    background: #11141a;
+    color: var(--text);
+    font-size: 14px;
+    outline: none;
+  }
+  input:focus {
+    border-color: var(--accent);
+  }
+  .alias-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .alias-row .prefix {
+    color: var(--muted);
+    font-size: 13px;
+    white-space: nowrap;
+  }
+  #aliasStatus {
+    font-size: 12px;
+    margin-top: 6px;
+    min-height: 16px;
+  }
+  #aliasStatus.available { color: var(--success); }
+  #aliasStatus.taken { color: var(--error); }
+  button {
+    width: 100%;
+    margin-top: 24px;
+    padding: 13px;
+    border: none;
+    border-radius: 10px;
+    background: var(--accent);
+    color: white;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  button:hover { background: var(--accent-hover); }
+  button:disabled { opacity: 0.6; cursor: not-allowed; }
+  .result {
+    margin-top: 24px;
+    padding: 16px;
+    background: #11141a;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    display: none;
+  }
+  .result.show { display: block; }
+  .result .url-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .result a {
+    color: var(--accent);
+    text-decoration: none;
+    word-break: break-all;
+    flex: 1;
+    font-size: 14px;
+  }
+  .copy-btn {
+    width: auto;
+    margin-top: 0;
+    padding: 8px 12px;
+    font-size: 12px;
+    background: var(--border);
+    color: var(--text);
+  }
+  .copy-btn:hover { background: #3a3f4d; }
+  .error-msg {
+    margin-top: 14px;
+    color: var(--error);
+    font-size: 13px;
+    display: none;
+  }
+  .error-msg.show { display: block; }
+</style>
+</head>
+<body>
+
+<div class="card">
+  <h1>🔗 Shortly</h1>
+  <p class="subtitle">Free URL shortener — readable links, no signup required.</p>
+
+  <form id="shortenForm">
+    <label for="longUrl">Paste your long URL</label>
+    <input type="url" id="longUrl" placeholder="https://open.spotify.com/playlist/..." required />
+
+    <label for="aliasInput">Custom alias (optional)</label>
+    <div class="alias-row">
+      <span class="prefix" id="platformPreview">yoursite.app/—/</span>
+      <input type="text" id="aliasInput" placeholder="my-summer-playlist" />
+    </div>
+    <div id="aliasStatus"></div>
+
+    <button type="submit" id="submitBtn">Shorten URL</button>
+    <div class="error-msg" id="errorMsg"></div>
+  </form>
+
+  <div class="result" id="resultBox">
+    <div class="url-row">
+      <a id="resultLink" href="#" target="_blank" rel="noopener"></a>
+      <button class="copy-btn" id="copyBtn">Copy</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  const longUrlInput = document.getElementById('longUrl');
+  const aliasInput = document.getElementById('aliasInput');
+  const platformPreview = document.getElementById('platformPreview');
+  const aliasStatus = document.getElementById('aliasStatus');
+  const form = document.getElementById('shortenForm');
+  const submitBtn = document.getElementById('submitBtn');
+  const errorMsg = document.getElementById('errorMsg');
+  const resultBox = document.getElementById('resultBox');
+  const resultLink = document.getElementById('resultLink');
+  const copyBtn = document.getElementById('copyBtn');
+
+  let aliasCheckTimeout = null;
+  let aliasIsAvailable = true;
+
+  function extractPlatformPreview(url) {
+    try {
+      const u = new URL(url);
+      let hostname = u.hostname.toLowerCase().replace(/^www\./, '').replace(/^open\./, '').replace(/^m\./, '');
+      const platform = hostname.split('.')[0];
+      return platform.replace(/[^a-z0-9-]/g, '') || 'link';
+    } catch {
+      return '—';
+    }
+  }
+
+  longUrlInput.addEventListener('input', () => {
+    const platform = extractPlatformPreview(longUrlInput.value);
+    platformPreview.textContent = `yoursite.app/${platform}/`;
+  });
+
+  aliasInput.addEventListener('input', () => {
+    clearTimeout(aliasCheckTimeout);
+    const alias = aliasInput.value.trim();
+    const platform = extractPlatformPreview(longUrlInput.value);
+
+    if (!alias || platform === '—') {
+      aliasStatus.textContent = '';
+      aliasStatus.className = '';
+      aliasIsAvailable = true;
+      return;
+    }
+
+    aliasStatus.textContent = 'Checking...';
+    aliasStatus.className = '';
+
+    aliasCheckTimeout = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/check-alias?platform=${encodeURIComponent(platform)}&alias=${encodeURIComponent(alias)}`);
+        const data = await res.json();
+        if (data.available) {
+          aliasStatus.textContent = '✓ Available';
+          aliasStatus.className = 'available';
+          aliasIsAvailable = true;
+        } else {
+          aliasStatus.textContent = '✗ Already taken — try another';
+          aliasStatus.className = 'taken';
+          aliasIsAvailable = false;
+        }
+      } catch (err) {
+        aliasStatus.textContent = '';
+      }
+    }, 400);
+  });
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    errorMsg.classList.remove('show');
+    resultBox.classList.remove('show');
+
+    if (!aliasIsAvailable) {
+      errorMsg.textContent = 'That alias is already taken. Please choose another.';
+      errorMsg.classList.add('show');
+      return;
+    }
+
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Shortening...';
+
+    try {
+      const res = await fetch('/api/shorten', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          originalUrl: longUrlInput.value.trim(),
+          customAliasInput: aliasInput.value.trim(),
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        errorMsg.textContent = data.error || 'Something went wrong.';
+        errorMsg.classList.add('show');
+        return;
+      }
+
+      resultLink.href = data.shortUrl;
+      resultLink.textContent = data.shortUrl;
+      resultBox.classList.add('show');
+      form.reset();
+      aliasStatus.textContent = '';
+      platformPreview.textContent = 'yoursite.app/—/';
+    } catch (err) {
+      errorMsg.textContent = 'Network error. Please try again.';
+      errorMsg.classList.add('show');
+    } finally {
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'Shorten URL';
+    }
+  });
+
+  copyBtn.addEventListener('click', () => {
+    navigator.clipboard.writeText(resultLink.href).then(() => {
+      copyBtn.textContent = 'Copied!';
+      setTimeout(() => (copyBtn.textContent = 'Copy'), 1500);
+    });
+  });
+</script>
+
+</body>
+</html>
