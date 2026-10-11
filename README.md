@@ -1,4 +1,4 @@
-# Shortly — Free URL Shortener (Sprint 1 MVP)
+# Snip — Free URL Shortener (Sprint 1 MVP)
 
 Paste a long URL, get a short readable link like:
 `yoursite.vercel.app/spotify/my-summer-playlist`
